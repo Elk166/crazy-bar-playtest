@@ -5222,7 +5222,7 @@ function openMake(auto){
   if(M.raf) cancelAnimationFrame(M.raf);
   M.pours = {}; M.perfect = 0; M.pouring = false; M.paused = false; M.amount = 0; M.dblAt = 0;
   M.serving = false; M.sy0 = 0; M.hold=null; M.circle=null; M.lastT=-Infinity;
-  M.ice = D.pick.ice; M.method = 0; M.methodNeed = 8;
+  M.ice = D.pick.ice; M.method = 0; M.methodNeed = M.order.method==='build'?3:8; _lastMag=0;
   M.strained = false; M.garnish = false; M.finish = false;
   layer.classList.add('on');
   renderVessel(true); renderGlass(); renderRail(); setStep(0);
@@ -5262,11 +5262,11 @@ function setStep(n){
   const o = M.order;
   const texts = [
     ['STEP 1 / 4','按住倒酒，松手停。','等酒入壶'],
-    ['STEP 2 / 4', o.method==='shake'?'摇动手机 8 下，也可点「摇一下」。':'沿杯身画 8 圈，也可点「搅一下」。',(o.method==='shake'?'摇一下 ':'搅一下 ')+'0/'+M.methodNeed],
+    ['STEP 2 / 4', o.method==='build'?'轻晃手机或点「轻搅」3 下。':o.method==='shake'?'摇动手机 8 下，也可点「摇一下」。':'沿杯身画 8 圈，也可点「搅一下」。',(o.method==='build'?'轻搅 ':o.method==='shake'?'摇一下 ':'搅一下 ')+'0/'+M.methodNeed],
     ['STEP 3 / 4','扣上滤冰器，把酒滤进成品杯；装饰会自动添加。','滤入杯中'],
     ['STEP 4 / 4','按住杯子向上推，端给客人。','交给'+ANIMAL_NAMES[o.npc]]
   ][n] || ['','',''];
-  if(k) k.textContent = o.method==='build'?(n===0?'杯中直调':'交付'):texts[0];
+  if(k) k.textContent = o.method==='build'?(['杯中直调','杯中轻搅','','交付'][n]):texts[0];
   if(hint) hint.textContent = texts[1];
   if(btn){
     btn.textContent = texts[2];
@@ -5348,9 +5348,9 @@ function renderRail(){
   } else if(M.step===1){
     rail.innerHTML = `<div class="method-card">
       <div class="mc-ico">${stockArt(o.method==='shake'?'shaker':'jigger')}</div>
-      <div class="mc-body"><div class="mc-t">${o.method==='shake'?'上下摇匀':'画圈搅拌'}</div>
-      <div class="mc-s">${o.method==='shake'?'摇 8 下':'搅 8 圈'} · 已 ${M.method}/${M.methodNeed}</div>
-      ${o.method==='shake' && typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission && !M.motionAsked?'<button id="enableMotion">启用摇手机</button>':''}
+      <div class="mc-body"><div class="mc-t">${o.method==='build'?'杯中轻搅':o.method==='shake'?'上下摇匀':'画圈搅拌'}</div>
+      <div class="mc-s">${o.method==='build'?'轻搅 3 下':o.method==='shake'?'摇 8 下':'搅 8 圈'} · 已 ${M.method}/${M.methodNeed}</div>
+      ${o.method!=='stir' && typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission && !M.motionAsked?'<button id="enableMotion">启用摇手机</button>':''}
       <div class="mc-bar"><i style="width:${Math.min(100,M.method/M.methodNeed*100)}%"></i></div></div>
     </div>`;
   } else if(M.step===2){
@@ -5446,12 +5446,11 @@ function refreshIngredients(){
   renderVessel();renderGlass();renderRail();
   const next=M.queue.find(i=>M.pours[i.id]==null);
   const btn=$('#actBtn');btn.disabled=!!next;btn.classList.toggle('wait',!!next);
-  btn.textContent=next?'继续加料':M.order.method==='build'?'完成调制':M.order.method==='shake'?'开始摇和':'开始搅拌';
+  btn.textContent=next?'继续加料':M.order.method==='build'?'开始轻搅':M.order.method==='shake'?'开始摇和':'开始搅拌';
   if(next)previewIngredient(next);
 }
 function advancePour(){
-  if(M.order.method==='build'){M.strained=true;M.garnish=true;renderGlass();setStep(3);}
-  else setStep(1);
+  setStep(1);
 }
 /* ---------- 加冰 / 摇和 / 滤酒 / 装饰 / 交付 ---------- */
 function addMethod(n=1){
@@ -5461,12 +5460,12 @@ function addMethod(n=1){
   M.lastT = now;
   M.method = clamp(M.method+n, 0, M.methodNeed);
   const o = M.order;
-  const w = $('#vesselWrap');
+  const w = $(o.method==='build'?'#glassWrap':'#vesselWrap');
   if(w){ w.classList.remove(o.method==='shake'?'shake-anim':'stir-anim'); void w.offsetWidth;
     w.classList.add(o.method==='shake'?'shake-anim':'stir-anim'); }
   if(o.method==='shake') SFX.shake(); else SFX.stir();
   const btn = $('#actBtn');
-  if(btn) btn.textContent = (o.method==='shake'?'摇一下 ':'搅一下 ')+M.method+'/'+M.methodNeed;
+  if(btn) btn.textContent = (o.method==='build'?'轻搅 ':o.method==='shake'?'摇一下 ':'搅一下 ')+M.method+'/'+M.methodNeed;
   renderRail();
   if(w){
     w.style.setProperty('--mix-progress',String(M.method/M.methodNeed));
@@ -5478,6 +5477,7 @@ function finishMethod(){
   if(M.step!==1) return;
   const w = $('#vesselWrap'); if(w) w.classList.remove('shake-anim','stir-anim');
   const o = M.order;
+  if(o.method==='build'){M.strained=true;M.garnish=true;renderGlass();setStep(3);SFX.ding();return;}
   toast(o.method==='shake'?'壶身结霜 · 摇好了':'香气出来了 · 搅好了');
   SFX.ding();
   setStep(2);
@@ -5528,6 +5528,7 @@ function serve(){
 function onMakeClick(e){
   if(e.target.closest('#actBtn')){ handleAct(); return; }
 
+  if(M.step===1 && M.order.method!=='stir' && e.target.closest('#glassWrap,#vesselWrap,.method-card') && !e.target.closest('#enableMotion')){addMethod();return;}
   if(e.target.closest('#glassWrap') && M.step===2){ strain(); return; }
 }
 function handleAct(){
@@ -5538,7 +5539,7 @@ function handleAct(){
   if(M.step>=3){ serve(); return; }
 }
 function onMakeDown(e){
-  if(M.step===1 && M.order.method==='shake' && e.target.closest('#enableMotion')){
+  if(M.step===1 && M.order.method!=='stir' && e.target.closest('#enableMotion')){
     M.motionAsked=true;
     if(typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission){
       try{DeviceMotionEvent.requestPermission().then(state=>{if(state!=='granted')toast('可以点「摇一下」完成');}).catch(()=>toast('可以点「摇一下」完成'));}catch(err){}
@@ -5669,10 +5670,10 @@ function advanceCustomer(){
 /* 摇手机：仅在摇和步骤生效；按钮仍为降级方案 */
 let _lastMag=0;
 window.addEventListener('devicemotion',(e)=>{
-  if(document.hidden || !M.active || M.step!==1 || !M.order || M.order.method!=='shake') return;
+  if(document.hidden || !M.active || M.step!==1 || !M.order || M.order.method==='stir') return;
   const a=e.accelerationIncludingGravity; if(!a) return;
   const mag=Math.sqrt((a.x||0)**2+(a.y||0)**2+(a.z||0)**2);
-  if(_lastMag && Math.abs(mag-_lastMag)>8 && performance.now()-M.lastT>220)addMethod(1);
+  if(_lastMag && Math.abs(mag-_lastMag)>(M.order.method==='build'?4:8) && performance.now()-M.lastT>220)addMethod(1);
   _lastMag=mag;
 },{passive:true});
 
