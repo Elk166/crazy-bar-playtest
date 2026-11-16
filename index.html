@@ -4045,8 +4045,17 @@ let S3=(()=>{
       if(e.target&&e.target.closest&&e.target.closest('button,a,input,select,textarea,.ocard,.lv-card,.modal,.ps-card,.make-layer')) return;
       onCanvasPick(e);
     });
-    applyCam(); render();
+    applyCam(); resize(); render();
    }catch(e){ const h=document.getElementById('scene3d'); if(h) h.innerHTML='<pre style="position:absolute;left:8px;top:200px;z-index:9999;background:#300;color:#f88;font:10px monospace;padding:8px;max-width:460px;white-space:pre-wrap">'+((e&&e.stack)||e)+'</pre>'; throw e; }
+  }
+  function resize(){
+    if(!camera||!renderer)return;
+    const host=renderer.domElement.parentElement;
+    const w=host.clientWidth,h=host.clientHeight;
+    if(!w||!h)return;
+    renderer.setSize(w,h,false);camera.aspect=w/h;
+    camera.fov=THREE.MathUtils.radToDeg(2*Math.atan(Math.tan(THREE.MathUtils.degToRad(FOV/2))*h/H));
+    camera.updateProjectionMatrix();render();
   }
   function applyCam(){ if(!camera) return;
     camera.position.set(camX,1.7,camZ);
@@ -4271,20 +4280,20 @@ let S3=(()=>{
           if(mesh)spiritBottles.push({id,mesh});
         });
       }else if(i===1){
-        const rows=[1.13,.77,.41];
+        const rows=[1.16,.75,.34];
         rows.forEach(y=>shelf(y-.031));
         const ids=['lemon','lime','syrup','tonic','egg','bitters','mint','limewedge','sugar'];
         ids.forEach((id,k)=>placeItem(dg,'aux',id,(k%3-1)*.34,rows[Math.floor(k/3)],-.04,i,
-          {scale:.76,label:AUX[id].short,tagY:-.055,tagZ:-.13,tagW:.318,
+          {scale:.76,label:AUX[id].short,tagY:-.068,tagZ:-.09,tagW:.215,
            hit:{w:.30,h:.32,d:.34,y:.14}}));
       }else if(i===2){
         board(width,.12,.46,0,1.50,.018);
         box(dg,.14,.036,.018,0x294747,-.26,1.50,-.222);
         box(dg,.038,.014,.020,0x8ee4dc,-.28,1.50,-.226);
         ['big','spear','crushed'].forEach((id,row)=>{
-          const y=.34+row*.37;shelf(y);
+          const y=.26+row*.45;shelf(y);
           for(let k=0;k<3;k++)placeItem(dg,'ice',id,(k-1)*.24,y+.026,-.08,i,
-            {scale:.94,label:k===1?ICES[id].name:'',tagY:-.055,tagZ:-.14,tagW:.34,
+            {scale:.94,label:k===1?ICES[id].name:'',tagY:-.075,tagZ:-.10,tagW:.215,
              hit:{w:.225,h:.28,d:.32,y:.10}});
         });
       }else{
@@ -4718,7 +4727,7 @@ let S3=(()=>{
   }
   function setItemPickHandler(fn){ itemPickHandler=fn; }
   function focusTab(i){ pickTab(i); }
-  return {init,setCam,setSeats,getCam,render,animate,snapshot,setPickHandler,setItemPickHandler,setBlurHandler,setPicked,debugPicked,setLevel,setMood,debugNpcParts,focusStation,focusTab,blurStation,drink,debugBounds,debugDetail,debugRay,debugParts,debugCabHit};
+  return {init,resize,setCam,setSeats,getCam,render,animate,snapshot,setPickHandler,setItemPickHandler,setBlurHandler,setPicked,debugPicked,setLevel,setMood,debugNpcParts,focusStation,focusTab,blurStation,drink,debugBounds,debugDetail,debugRay,debugParts,debugCabHit};
 })();
 
 </script>
@@ -5841,7 +5850,7 @@ function camTo(yaw,pitch,dur=800,opt={}){
   cancelAnimationFrame(camRaf);
   const token=++camToken;
   const y0=cam.yaw,p0=cam.pitch,rollMax=opt.roll||0;
-  if(document.documentElement.classList.contains('still')||dur<=0){ cam.yaw=yaw;cam.pitch=pitch;cam.roll=0;applyCam();return Promise.resolve(); }
+  if(document.documentElement.classList.contains('still')||dur<=0){ world.classList.remove('turning'); cam.yaw=yaw;cam.pitch=pitch;cam.roll=0;applyCam();return Promise.resolve(); }
   const t0=performance.now();
   world.classList.toggle('turning', Math.abs(yaw-y0)>40);
   return new Promise(res=>{
@@ -6001,14 +6010,14 @@ async function showBar(fromPrep){
 async function goBarToPrep(){
   if(D.busy) return; D.busy=true;
   D.screen='prep'; D.prepFocus=false; if(typeof S3!=='undefined'&&S3.blurStation) S3.blurStation(); renderWorld(); renderHUD();
-  await camTo(180,-3,320,{roll:3});
+  await camTo(180,-3,0);
   D.busy=false;
 }
 async function goPrepToBar(){
   if(D.busy) return; D.busy=true;
   D.prepFocus=false; if(typeof S3!=='undefined'&&S3.blurStation) S3.blurStation();
   D.screen='bar'; renderWorld(); renderHUD();
-  await camTo(0,2,320,{roll:3});
+  await camTo(0,2,0);
   D.busy=false;
   startMake();
 }
@@ -6113,7 +6122,7 @@ function showLevels(){
 /* ---------- boot ---------- */
 function boot(){
   if(D.booted) return; D.booted=true; fitView();
-  try{ S3.init(); }
+  try{ S3.init(); S3.resize?.(); }
   catch(error){
     console.warn('使用轻量画面',error.message);
     S3=canvasBar;
@@ -6164,7 +6173,12 @@ function fitView(){
   const w=Math.min(area.clientWidth,vv?.width || innerWidth);
   const h=Math.min(area.clientHeight,vv?.height || innerHeight);
   const s=Math.min(w/480,h/940);
-  document.documentElement.style.setProperty('--s',s.toFixed(4));
+  if(!s)return;
+  const portrait=w<=h;
+  stage.style.width=(portrait?w/s:480)+'px';
+  stage.style.height=(portrait?h/s:940)+'px';
+  document.documentElement.style.setProperty('--s',String(s));
+  S3.resize?.();
   document.documentElement.style.setProperty('--appH',h+'px');
 }
 document.addEventListener('visibilitychange',()=>{
