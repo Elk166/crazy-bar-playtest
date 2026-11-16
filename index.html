@@ -1249,6 +1249,10 @@ body,#stage,#scene3d{background:#251912}
 #saloonGuest .guest-request{display:none}
 #ui .fh .fh-bottom{left:auto;background:none;border:0;box-shadow:none;padding:0}
 
+.prep-orders{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin-top:4px;pointer-events:auto}
+.prep-orders button{display:flex;align-items:center;justify-content:center;gap:4px;min-height:36px;padding:2px;border:1px solid #8e704f;border-radius:4px;background:#34251c;color:#f5e6cd;font-size:14px}
+.prep-orders small{color:#dfc19a}.prep-orders [aria-pressed=true]{background:#344b40;border-color:#c5a36b}
+
 </style>
 </head>
 <body>
@@ -4244,6 +4248,7 @@ let S3=(()=>{
   }
   function setPicked(keys){
     pickedSet=new Set(Array.isArray(keys)?keys:[]);
+    paintFreezer?.();
     for(const h of pickables) if(h.userData.ring) h.userData.ring.visible=pickedSet.has(h.userData.pick);
     if(renderer&&camera) renderer.render(scene,camera);
   }
@@ -4251,6 +4256,43 @@ let S3=(()=>{
   function debugPicked(){ return Array.from(pickedSet); }
   function setBlurHandler(fn){ blurHandler=fn; }
 
+  const freezerRows=['crushed','spear','big'];
+  let paintFreezer;
+  function buildFlatFreezer(group,width,height){
+    const canvas=document.createElement('canvas');
+    canvas.width=560;canvas.height=960;
+    const ctx=canvas.getContext('2d');
+    const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;
+    const face=new THREE.Sprite(new THREE.SpriteMaterial({map}));
+    face.center.set(.5,0);face.scale.set(width,height,1);face.userData.freezer=true;group.add(face);
+    const images={};
+    paintFreezer=()=>{
+      const metal=ctx.createLinearGradient(0,0,560,0);
+      metal.addColorStop(0,'#abada5');metal.addColorStop(.12,'#e5e2d5');metal.addColorStop(.7,'#d4d4c7');metal.addColorStop(1,'#a8afa8');
+      ctx.fillStyle=metal;ctx.fillRect(0,0,560,960);
+      ctx.fillStyle='#3b514e';ctx.fillRect(421,29,96,22);ctx.fillStyle='#a8dace';ctx.fillRect(461,35,46,10);
+      freezerRows.forEach((id,i)=>{
+        const top=72+i*278,beam=top+226;
+        ctx.fillStyle='#516765';ctx.fillRect(16,top,528,226);
+        const img=images[id];
+        if(img){const scale=Math.min(137/img.width,167/img.height);
+          const w=img.width*scale,h=img.height*scale;
+          for(const x of [110,280,450])ctx.drawImage(img,x-w/2,beam-8-h,w,h);}
+        ctx.fillStyle=metal;ctx.fillRect(16,beam,528,52);
+        ctx.fillStyle='#89948b';ctx.fillRect(16,beam,528,2);
+        const picked=pickedSet.has('ice:'+id);
+        ctx.fillStyle=picked?'#285349':'#f2e9d7';ctx.fillRect(202,beam+8,156,36);
+        ctx.fillStyle=picked?'#fff5d9':'#372b23';ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.font='bold 25px sans-serif';ctx.fillText(ICES[id].name,280,beam+27);
+      });
+      map.needsUpdate=true;
+    };
+    paintFreezer();
+    for(const id of freezerRows){
+      const img=new Image();img.onload=()=>{images[id]=img;paintFreezer();render();};
+      img.src=nightAsset('stock-'+id);
+    }
+  }
   function prep(){
     drawerGroups=[]; spiritBottles=[]; stationTags=[[],[],[],[]];
     pickables=[]; itemTags=[]; pickedSet=new Set();
@@ -4261,46 +4303,40 @@ let S3=(()=>{
       const dg=new THREE.Group(); dg.position.set(xs[i],counterHeight,z0); dg.scale.set(PREP_SCALE,.98,PREP_SCALE); dg.userData.tab=i;
       scene.add(dg); drawerGroups.push(dg);
       const width=[.88,1.10,.86,1.12][i], height=1.56;
-      const board=(w,h,depth,x,y,z,tint=0xd0ab84)=>
-        box(dg,w,h,depth,i===2?(depth<.05?0x9ab6ba:0xdce4e1):tint,x,y,z,{map:i===2?null:tex.cabinet,shadow:false,receive:false});
-      const shelf=y=>board(width-.055,.041,.34,0,y,.015);
-      // All boards are behind the pickable art except the shelf immediately under each row.
-      board(width,.15,.49,0,.075,.02);
-      board(width-.08,height-.17,.045,0,.79,.232,0x977c69);
-      for(const side of [-1,1])board(.035,height-.14,.42,side*(width-.035)/2,.83,.045);
-      board(width+.018,.055,.46,0,height,.025);
-      board(width,.025,.44,0,height-.04,.025,0xac845f);
-      for(const side of [-1,1])board(.023,height-.18,.023,side*(width-.056)/2,.82,-.17,0xe4c59c);
-      if(i===0){
-        shelf(.45);shelf(.80);
-        ['bourbon','gin','rum'].forEach((id,k)=>{
-          const mesh=placeItem(dg,'spirit',id,(k-1)*.255,.832,-.08,i,
-            {scale:1,label:['波本','金酒','朗姆'][k],tagY:-.063,tagZ:-.16,tagW:.249,
-             hit:{w:.245,h:.39,d:.31,y:.15}});
-          if(mesh)spiritBottles.push({id,mesh});
-        });
-      }else if(i===1){
-        const rows=[1.16,.75,.34];
-        rows.forEach(y=>shelf(y-.031));
-        const ids=['lemon','lime','syrup','tonic','egg','bitters','mint','limewedge','sugar'];
-        ids.forEach((id,k)=>placeItem(dg,'aux',id,(k%3-1)*.34,rows[Math.floor(k/3)],-.04,i,
-          {scale:.76,label:AUX[id].short,tagY:-.068,tagZ:-.09,tagW:.215,
-           hit:{w:.30,h:.32,d:.34,y:.14}}));
-      }else if(i===2){
-        board(width,.12,.46,0,1.50,.018);
-        box(dg,.14,.036,.018,0x294747,-.26,1.50,-.222);
-        box(dg,.038,.014,.020,0x8ee4dc,-.28,1.50,-.226);
-        ['big','spear','crushed'].forEach((id,row)=>{
-          const y=.26+row*.45;shelf(y);
-          for(let k=0;k<3;k++)placeItem(dg,'ice',id,(k-1)*.24,y+.026,-.08,i,
-            {scale:.94,label:k===1?ICES[id].name:'',tagY:-.075,tagZ:-.10,tagW:.215,
-             hit:{w:.225,h:.28,d:.32,y:.10}});
-        });
+      if(i===2){
+        buildFlatFreezer(dg,width,height);
       }else{
-        shelf(.68);
-        GLASS_ORDER.forEach((id,k)=>placeItem(dg,'glass',id,(1.5-k)*.255,.709,-.06,i,
-          {scale:1,label:GLASSES[id].short,tagY:-.06,tagZ:-.15,tagW:.245,
-           hit:{w:.24,h:.46,d:.30,y:.17}}));
+        const board=(w,h,depth,x,y,z,tint=0xd0ab84)=>
+          box(dg,w,h,depth,i===2?(depth<.05?0x9ab6ba:0xdce4e1):tint,x,y,z,{map:i===2?null:tex.cabinet,shadow:false,receive:false});
+        const shelf=y=>board(width-.055,.041,.34,0,y,.015);
+        // All boards are behind the pickable art except the shelf immediately under each row.
+        board(width,.15,.49,0,.075,.02);
+        board(width-.08,height-.17,.045,0,.79,.232,0x977c69);
+        for(const side of [-1,1])board(.035,height-.14,.42,side*(width-.035)/2,.83,.045);
+        board(width+.018,.055,.46,0,height,.025);
+        board(width,.025,.44,0,height-.04,.025,0xac845f);
+        for(const side of [-1,1])board(.023,height-.18,.023,side*(width-.056)/2,.82,-.17,0xe4c59c);
+        if(i===0){
+          shelf(.45);shelf(.80);
+          ['bourbon','gin','rum'].forEach((id,k)=>{
+            const mesh=placeItem(dg,'spirit',id,(k-1)*.255,.832,-.08,i,
+              {scale:1,label:['波本','金酒','朗姆'][k],tagY:-.063,tagZ:-.16,tagW:.249,
+               hit:{w:.245,h:.39,d:.31,y:.15}});
+            if(mesh)spiritBottles.push({id,mesh});
+          });
+        }else if(i===1){
+          const rows=[1.16,.75,.34];
+          rows.forEach(y=>shelf(y-.031));
+          const ids=['lemon','lime','syrup','tonic','egg','bitters','mint','limewedge','sugar'];
+          ids.forEach((id,k)=>placeItem(dg,'aux',id,(k%3-1)*.34,rows[Math.floor(k/3)],-.04,i,
+            {scale:.76,label:AUX[id].short,tagY:-.068,tagZ:-.09,tagW:.215,
+             hit:{w:.30,h:.32,d:.34,y:.14}}));
+        }else{
+          shelf(.68);
+          GLASS_ORDER.forEach((id,k)=>placeItem(dg,'glass',id,(1.5-k)*.255,.709,-.06,i,
+            {scale:1,label:GLASSES[id].short,tagY:-.06,tagZ:-.15,tagW:.245,
+             hit:{w:.24,h:.46,d:.30,y:.17}}));
+        }
       }
       const name=['酒柜','辅料台','冰柜','杯架'][i];
       const anchor=new THREE.Object3D();anchor.position.set(0,1.72,0);dg.add(anchor);
@@ -4341,6 +4377,12 @@ let S3=(()=>{
     const focused=camZ>2.1;
     if(!focused){
       for(const h of hits){ let o=h.object; while(o){ if(o.userData&&o.userData.tab!=null){ pickTab(o.userData.tab); return; } o=o.parent; } }
+    }
+    const freezer=hits.find(hit=>hit.object.userData.freezer);
+    if(focused && freezer){
+      const row=Math.floor(((1-freezer.uv.y)*960-72)/278);
+      if(freezerRows[row])itemPickHandler?.('ice:'+freezerRows[row]);
+      return;
     }
     for(const h of hits){ let o=h.object; while(o){ if(o.userData&&o.userData.pick){ if(itemPickHandler) itemPickHandler(o.userData.pick); return; } o=o.parent; } }
     /* v11.13「点柜体以外的空白返回备料墙」——四柜一致、任意方位。
@@ -5076,12 +5118,13 @@ function prepWorld(){
 }
 function serviceHeader(o,making){return `    <div class="topbar">
       <button class="icon-btn" id="${making?'backToBarBtn':'fhHome'}" aria-label="返回">${ICON.arrow}</button>
-      <div class="title"><div class="t1">${making||D.prepFocus?o.name:`<details class="order-menu"><summary>${o.name} ▾</summary><div class="ticket-rail">${D.seats.map((t,i)=>`<button data-ticket="${i}" aria-pressed="${i===D.active}"><small>${ANIMAL_NAMES[t.npc]}</small><b>${t.name}</b><span>${t.methodName}</span>${t.rushUntil?`<em data-rush="${t.no}"></em>`:''}</button>`).join('')}</div></details>`}</div></div>
+      <div class="title"><div class="t1">${making||D.screen==='prep'?o.name:`<details class="order-menu"><summary>${o.name} ▾</summary><div class="ticket-rail">${D.seats.map((t,i)=>`<button data-ticket="${i}" aria-pressed="${i===D.active}"><small>${ANIMAL_NAMES[t.npc]}</small><b>${t.name}</b><span>${t.methodName}</span>${t.rushUntil?`<em data-rush="${t.no}"></em>`:''}</button>`).join('')}</div></details>`}</div></div>
       <div class="top-actions"><div class="lv-timer js-timer"><span class="lt-ico">⏱</span><span class="lt-val">02:30</span></div><div class="coin-pill"><span>${shiftScore()} 分</span></div></div>
     </div>
     <section class="compact-recipe">
       <div class="guest-line"><img src="${nightAsset('face-'+o.npc)}" alt="${ANIMAL_NAMES[o.npc]}"><span>${ANIMAL_NAMES[o.npc]} 说：<b>${o.note||'照平常做'}</b></span>${o.rushUntil?`<em data-rush="${o.no}"></em>`:''}</div>
       <div class="recipe-chips">${[...o.ingredients.filter(i=>i.target>0).map(i=>[i.id,i.short]),[o.ice,ICES[o.ice].short],[o.glass,GLASSES[o.glass].short]].map(([id,name])=>`<span class="${D.screen==='prep'&&!making&&[D.pick.spirit,D.pick.ice,D.pick.glass,...D.pick.aux].includes(id)?'collected':''}">${stockArt(id)}${name}</span>`).join('')}</div>
+      ${!making&&D.screen==='prep'?`<nav class="prep-orders" aria-label="客人酒单">${D.seats.map((t,i)=>`<button data-ticket="${i}" aria-pressed="${i===D.active}"><small>${ANIMAL_NAMES[t.npc]}</small><b>${t.name}</b></button>`).join('')}</nav>`:''}
     </section>
 `;}
 function hudHTML(){
@@ -5932,7 +5975,7 @@ function bindHUD(){
   };
   if(home) home.onclick=()=>{
     if(D.busy) return;
-    if(D.screen==='prep' && D.prepFocus){ D.prepFocus=false; if(typeof S3!=='undefined'&&S3.blurStation) S3.blurStation(); renderHUD(); return; }
+    if(D.screen==='prep'){ goPrepToBar(false); return; }
     showLevels();
   };
   const act=document.getElementById('fhAction');
@@ -6013,13 +6056,13 @@ async function goBarToPrep(){
   await camTo(180,-3,0);
   D.busy=false;
 }
-async function goPrepToBar(){
+async function goPrepToBar(make=true){
   if(D.busy) return; D.busy=true;
   D.prepFocus=false; if(typeof S3!=='undefined'&&S3.blurStation) S3.blurStation();
   D.screen='bar'; renderWorld(); renderHUD();
   await camTo(0,2,0);
   D.busy=false;
-  startMake();
+  if(make) startMake();
 }
 function startMake(){
   if(D.busy) return;
