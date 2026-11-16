@@ -1253,6 +1253,10 @@ body,#stage,#scene3d{background:#251912}
 .prep-orders button{display:flex;align-items:center;justify-content:center;gap:4px;min-height:36px;padding:2px;border:1px solid #8e704f;border-radius:4px;background:#34251c;color:#f5e6cd;font-size:14px}
 .prep-orders small{color:#dfc19a}.prep-orders [aria-pressed=true]{background:#344b40;border-color:#c5a36b}
 
+.make-layer.ready-to-serve .station .glass-wrap{left:35.5%;top:37%;touch-action:none;cursor:pointer;pointer-events:auto;transition:left .25s ease-out,top .25s ease-out}
+.make-layer.ready-to-serve .vessel-wrap,.make-layer.ready-to-serve .mix-controls{visibility:hidden}
+@media(prefers-reduced-motion:reduce){.make-layer.ready-to-serve .station .glass-wrap{transition:none}}
+
 </style>
 </head>
 <body>
@@ -5253,6 +5257,7 @@ function setStep(n){
   M.step = n;
   const meter=$('#gauge'); if(meter) meter.hidden=n!==0;
   const layer = $('#makeLayer'); if(!layer) return;
+  layer.classList.toggle('ready-to-serve',n===3);
   $$('.steps .st', layer).forEach(el=>{
     const s = +el.dataset.step;
     el.classList.toggle('on', s===n);
@@ -5264,7 +5269,7 @@ function setStep(n){
     ['STEP 1 / 4','按住倒酒，松手停。','等酒入壶'],
     ['STEP 2 / 4', o.method==='build'?'轻晃手机或点「轻搅」3 下。':o.method==='shake'?'摇动手机 8 下，也可点「摇一下」。':'沿杯身画 8 圈，也可点「搅一下」。',(o.method==='build'?'轻搅 ':o.method==='shake'?'摇一下 ':'搅一下 ')+'0/'+M.methodNeed],
     ['STEP 3 / 4','扣上滤冰器，把酒滤进成品杯；装饰会自动添加。','滤入杯中'],
-    ['STEP 4 / 4','按住杯子向上推，端给客人。','交给'+ANIMAL_NAMES[o.npc]]
+    ['STEP 4 / 4','轻点桌中央的酒，或向上推出交付。','交给'+ANIMAL_NAMES[o.npc]]
   ][n] || ['','',''];
   if(k) k.textContent = o.method==='build'?(['杯中直调','杯中轻搅','','交付'][n]):texts[0];
   if(hint) hint.textContent = texts[1];
@@ -5526,6 +5531,7 @@ function serve(){
 }
 
 function onMakeClick(e){
+  if(M.step===3 && e.target.closest('#glassWrap')){serve();return;}
   if(e.target.closest('#actBtn')){ handleAct(); return; }
 
   if(M.step===1 && M.order.method!=='stir' && e.target.closest('#glassWrap,#vesselWrap,.method-card') && !e.target.closest('#enableMotion')){addMethod();return;}
@@ -5557,7 +5563,10 @@ function onMakeDown(e){
     M.circle={id:e.pointerId,x:r.left+r.width/2,y:r.top+r.height/2,total:0};
     e.currentTarget.setPointerCapture(e.pointerId);trackCircle(e);
   }
-  if(M.step===3 && e.target.closest('#glassWrap'))M.sy0=e.clientY;
+  if(M.step===3 && e.target.closest('#glassWrap')){
+    M.sy0=e.clientY;
+    $('#glassWrap').setPointerCapture(e.pointerId);
+  }
 }
 function trackCircle(e){
   const c=M.circle;if(!c||c.id!==e.pointerId||M.step!==1)return;
