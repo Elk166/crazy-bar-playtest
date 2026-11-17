@@ -1532,7 +1532,7 @@ SAVE.unlocked=Math.max(1,Math.min(3,Number(SAVE.unlocked)||1));
 const SFX = (()=>{
   let ctx=null, on=true, noiseBuf=null;
   function ac(){
-    if(SAVE.muted) return null;
+    if(SAVE.muted || document.hidden) return null;
     if(!ctx){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; ctx=new C(); }
     if(ctx.state==='suspended') ctx.resume();
     return ctx;
@@ -1564,6 +1564,22 @@ const SFX = (()=>{
     env(g,c.currentTime+delay,0.02,dur,vol);
     s.start(c.currentTime+delay); s.stop(c.currentTime+delay+dur+0.05);
   }
+  // Slow four-beat saloon shuffle: alternating bass, brushed backbeat and rolled chords.
+  const chords=[[110,220,277.18,329.63],[110,246.94,329.63,369.99],
+    [146.83,220,293.66,369.99],[164.81,207.65,293.66,329.63]];
+  let beat=0, musicTimer;
+  function musicBeat(){
+    if(document.hidden || SAVE.muted || ctx?.state!=='running') return;
+    const chord=chords[Math.floor(beat/4)%chords.length], pulse=beat%4;
+    if(pulse%2===0){
+      tone(chord[0]*(pulse===2?1.5:1),.42,{vol:.061});
+      if(pulse===2) tone(chord[3]*2,.29,{type:'triangle',vol:.018,delay:.45});
+    }else{
+      chord.slice(1).forEach((f,i)=>tone(f,.35,{type:'triangle',vol:.022,delay:i*.023}));
+      noise(.12,{freq:1600,q:.65,vol:.026});
+    }
+    beat=(beat+1)%16;
+  }
   return {
     sip(){
       noise(.19,{freq:1300,q:1.4,vol:.09});
@@ -1586,21 +1602,21 @@ const SFX = (()=>{
       }
       voice.start(t);voice.stop(t+duration+.03);
     },
-    unlock(){ ac(); },
+    unlock(){ ac(); if(!musicTimer) musicTimer=setInterval(musicBeat,730); },
     ding(){ tone(1046,.16,{type:'sine',vol:.16}); tone(1568,.2,{type:'sine',vol:.09,delay:.03}); },
-    tick(){ tone(1400,.05,{type:'square',vol:.05}); },
-    pick(){ tone(660,.09,{type:'triangle',vol:.14}); tone(990,.12,{type:'triangle',vol:.1,delay:.05}); },
+    tick(){ noise(.045,{freq:680,q:1,vol:.12}); tone(182,.06,{vol:.06,slide:.65}); },
+    pick(){ tone(230,.07,{vol:.085,slide:.7}); tone(1260,.13,{vol:.043,delay:.016}); },
     pop(){ tone(520,.09,{type:'sine',vol:.14,slide:1.6}); },
     clink(){ tone(2100,.08,{type:'sine',vol:.08}); tone(3100,.1,{type:'sine',vol:.05,delay:.03}); },
-    cap(){ noise(.08,{freq:1200,q:1,vol:.12}); tone(240,.1,{type:'square',vol:.06}); },
+    cap(){ noise(.08,{freq:1200,q:1,vol:.12}); tone(240,.1,{type:'triangle',vol:.06}); },
     pour(d=.7){ noise(d,{freq:900,q:.7,vol:.17}); noise(d*.8,{freq:2400,q:2,vol:.06,delay:.05}); },
-    shake(){ for(let i=0;i<4;i++) noise(.07,{freq:2600,q:1.4,vol:.13,delay:i*.09}); tone(180,.12,{type:'square',vol:.05,delay:.05}); },
-    stir(){ noise(.18,{freq:700,q:2.4,vol:.1}); },
+    shake(){ for(let i=0;i<4;i++) noise(.07,{freq:2600,q:1.4,vol:.13,delay:i*.09}); tone(180,.12,{type:'triangle',vol:.05,delay:.05}); },
+    stir(){ noise(.16,{freq:940,q:1.7,vol:.08}); tone(1860,.14,{vol:.044,delay:.07}); },
     ice(){ noise(.18,{freq:3600,q:1.2,vol:.15}); noise(.1,{freq:1800,q:1,vol:.1,delay:.06}); },
     foam(){ noise(.5,{freq:5200,q:.8,vol:.1,type:'highpass'}); },
-    coin(){ tone(988,.09,{type:'square',vol:.13}); tone(1319,.16,{type:'square',vol:.11,delay:.07}); },
-    happy(){ [784,988,1175].forEach((f,i)=>tone(f,.12,{type:'triangle',vol:.16,delay:i*.09})); },
-    wow(){ [1046,1318,1568,2093].forEach((f,i)=>tone(f,.1,{type:'sine',vol:.14,delay:i*.06})); },
+    coin(){ tone(988,.09,{type:'triangle',vol:.13}); tone(1319,.16,{type:'triangle',vol:.11,delay:.07}); },
+    happy(){ [440,554.37,659.25].forEach((f,i)=>tone(f,.12,{type:'triangle',vol:.16,delay:i*.09})); },
+    wow(){ [440,554.37,659.25,880].forEach((f,i)=>tone(f,.1,{type:'sine',vol:.14,delay:i*.06})); },
     sad(){ [420,352,280].forEach((f,i)=>tone(f,.16,{type:'triangle',vol:.14,delay:i*.11,slide:.9})); },
     whoosh(){ noise(.35,{freq:600,q:.6,vol:.12}); },
     door(){ noise(.4,{freq:500,q:.8,vol:.1}); tone(120,.25,{type:'sine',vol:.05}); }
