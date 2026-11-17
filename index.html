@@ -1635,14 +1635,35 @@ const BGM=(()=>{
 ];
   const player=new Audio();
   player.preload='none';
+  player.crossOrigin='anonymous';
+  let mixContext,musicGain,duckUntil=0;
+  function mix(){
+    const level=(SAVE.musicVolume??.35)*.42;
+    const target=performance.now()<duckUntil?level*.27:level;
+    if(musicGain)musicGain.gain.setTargetAtTime(target,mixContext.currentTime,target<level?.018:.15);
+    else player.volume=target;
+  }
+  let restore;
+  function duck(seconds){
+    duckUntil=Math.max(duckUntil,performance.now()+seconds*1000);mix();
+    clearTimeout(restore);restore=setTimeout(mix,Math.ceil(duckUntil-performance.now())+5);
+  }
   let started=false,last=-1;
   const index=()=>tracks[SAVE.track]?Number(SAVE.track):0;
   function sync(){
-    player.volume=SAVE.musicVolume??.35;
-    if(SAVE.muted||document.hidden||!player.volume)player.pause();
+    mix();
+    if(SAVE.muted||document.hidden||SAVE.musicVolume===0)player.pause();
     else if(started)player.play().catch(()=>{});
   }
   function start(){
+    if(!mixContext && (window.AudioContext||window.webkitAudioContext)){
+      mixContext=new (window.AudioContext||window.webkitAudioContext)();
+      musicGain=mixContext.createGain();
+      musicGain.gain.value=0;
+      mixContext.createMediaElementSource(player).connect(musicGain);
+      musicGain.connect(mixContext.destination);
+    }
+    mixContext?.resume().catch(()=>{});
     started=true;
     if(index()!==last){
       last=index();
@@ -1653,7 +1674,7 @@ const BGM=(()=>{
   player.loop=true;
   document.addEventListener('visibilitychange',sync);
   window.addEventListener('pagehide',()=>player.pause());
-  return {tracks,index,start,sync};
+  return {tracks,index,start,sync,duck};
 })();
 // Recorded instrument samples arranged for the saloon. Credits travel with the HTML.
 const SFX=(()=>{
@@ -1676,6 +1697,7 @@ const SFX=(()=>{
   function play(instrument,note,length,volume,delay=0){
     const [name,root]=instruments[instrument];
     if(!ctx||!buffers[name]||SAVE.muted||document.hidden)return;
+    if((SAVE.effectsVolume??1)>0)BGM.duck(length+delay+.28);
     const s=ctx.createBufferSource(),g=ctx.createGain(),t=ctx.currentTime+delay;
     s.buffer=buffers[name];s.playbackRate.value=2**((note-root)/12);
     g.gain.setValueAtTime(volume*(SAVE.effectsVolume??1),t);g.gain.setTargetAtTime(.0001,t+length,.045);
@@ -4904,7 +4926,7 @@ function liveCoverHTML(){
     <div class="lc-hero">
       <div class="kicker">WHISKEY SALOON</div>
       <h1>疯狂吧台</h1>
-      <div class="sub">两分半钟营业，今晚你当班</div>
+      <div class="sub">一分半钟营业，今晚你当班</div>
     </div>
     <div class="lc-cta">
       <button class="btn btn-start" id="startBtn">开始游戏<small>ENTER THE BAR</small></button>
@@ -5133,7 +5155,7 @@ function prepScene(){
     <div class="hud-top">
       <button class="icon-btn light" id="prepBackBtn">${ICON.arrow}</button>
       <div class="title"><div class="t1">备料区</div><div class="t2">BACK BAR · 拿齐材料再回吧台</div></div>
-      <div class="top-actions"><div class="lv-timer js-timer"><span class="lt-ico">⏱</span><span class="lt-val">02:30</span></div><div class="coin-pill"><span>${shiftScore()} 分</span></div></div>
+      <div class="top-actions"><div class="lv-timer js-timer"><span class="lt-ico">⏱</span><span class="lt-val">01:30</span></div><div class="coin-pill"><span>${shiftScore()} 分</span></div></div>
     </div>
     ${prepOrderStrip(o)}
     <div class="prep-zones">
@@ -5213,7 +5235,7 @@ function prepWorld(){
 function serviceHeader(o,making){return `    <div class="topbar">
       <button class="icon-btn" id="${making?'backToBarBtn':'fhHome'}" aria-label="返回">${ICON.arrow}</button>
       <div class="title"><div class="t1">${making||D.screen==='prep'?o.name:`<details class="order-menu"><summary>${o.name} ▾</summary><div class="ticket-rail">${D.seats.map((t,i)=>`<button data-ticket="${i}" aria-pressed="${i===D.active}"><small>${ANIMAL_NAMES[t.npc]}</small><b>${t.name}</b><span>${t.methodName}</span>${t.rushUntil?`<em data-rush="${t.no}"></em>`:''}</button>`).join('')}</div></details>`}</div></div>
-      <div class="top-actions"><div class="lv-timer js-timer"><span class="lt-ico">⏱</span><span class="lt-val">02:30</span></div><div class="coin-pill"><span>${shiftScore()} 分</span></div></div>
+      <div class="top-actions"><div class="lv-timer js-timer"><span class="lt-ico">⏱</span><span class="lt-val">01:30</span></div><div class="coin-pill"><span>${shiftScore()} 分</span></div></div>
     </div>
     <section class="compact-recipe">
       <div class="guest-line"><img src="${nightAsset('face-'+o.npc)}" alt="${ANIMAL_NAMES[o.npc]}"><span>${ANIMAL_NAMES[o.npc]} 说：<b>${o.note||'照平常做'}</b></span>${o.rushUntil?`<em data-rush="${o.no}"></em>`:''}</div>
@@ -5271,7 +5293,7 @@ function levelsScene(){
   return `<section class="levels">
     <div class="lv-bg"><div class="lv-glow"></div></div>
     <div class="lv-top"><button class="icon-btn light" id="lvBack">${ICON.arrow}</button>
-      <div class="lv-title">选择关卡<span>两分半钟营业挑战</span></div>
+      <div class="lv-title">选择关卡<span>一分半钟营业挑战</span></div>
       <div class="fh-coin">${ICON.coin}<span>${SAVE.coins}</span></div></div>
     <div class="lv-list">${cards}</div>
     <div class="lv-hero">
@@ -5282,7 +5304,7 @@ function levelsScene(){
       <div class="lv-guests">${levelRoster(SAVE.unlocked).slice(0,3).map(k=>`<span><img alt="" src="${nightAsset('face-'+k)}"></span>`).join('')}<em>${levelRoster(SAVE.unlocked).length+' 位常客'}</em></div>
     </div>
     <button class="lv-start" id="lvStart">进入第 ${SAVE.unlocked} 关 →</button>
-    <div class="lv-tip">限时 2 分 30 秒 · 第三关按酒款计分 · 达标开启下一关</div>
+    <div class="lv-tip">限时 1 分 30 秒 · 第三关按酒款计分 · 达标开启下一关</div>
   </section>`;
 }
 
@@ -5794,13 +5816,13 @@ const D = {
   seats:[], pending:[], active:0,
   order:null, pick:null, results:[], busy:false, booted:false,
   /* v11.15 · 营业计时与品尝反馈态 */
-  timeLeft:150, timeUp:false, timerId:0, tasting:false,
+  timeLeft:90, timeUp:false, timerId:0, tasting:false,
   prepTab:'spirit', prepFocus:false
 };
-/* 每关营业时长：默认 2 分 30 秒。?timer=N 仅供自动化验收快速跑完一关，不改变正式玩法。 */
+/* 每关营业时长：默认 1 分 30 秒。?timer=N 仅供自动化验收快速跑完一关，不改变正式玩法。 */
 const LEVEL_SECONDS = (()=>{
   const n=parseInt(new URLSearchParams(location.search).get('timer')||'',10);
-  return (n>0 && n<=3600) ? n : 150;
+  return (n>0 && n<=3600) ? n : 90;
 })();
 const SEAT_NPCS = ['fox','bear','rabbit','panda'];
 /* v11.12：补齐现有 4 关的 NPC 名单（不新增关卡、不新增酒品） */
@@ -6038,7 +6060,7 @@ function renderHUD(){
   bindHUD();
   if(D.screen==='prep' && S3===canvasBar){ renderPrepSheet(); prepSheet.classList.add('on'); }
   else if(prepSheet){ prepSheet.classList.remove('on'); prepSheet.innerHTML=''; }
-  updateTimerUI();                 /* HUD 重绘后立刻把计时补回，不会闪成 02:30 */
+  updateTimerUI();                 /* HUD 重绘后立刻把计时补回，不会闪成 01:30 */
 }
 function bindCover(){
   const sound=document.getElementById('soundSwitch');
@@ -6063,7 +6085,7 @@ function bindCover(){
       <ol><li><b>读单备料</b>记下客人的口味，直接点货架上的材料，拿齐基酒、辅料、冰和杯子。</li>
       <li><b>看刻度停手</b>按住材料倒酒，在金线附近松手。按份的材料点一下加入。备好的冰自动加入，接着摇和或搅拌。</li>
       <li><b>滤酒交杯</b>按提示滤入杯中，上滑交付。连续完美出杯，从第二杯开始赚小费。</li></ol>
-      <p>快单在标注时间内高质量交付（品质达到 92%），多赚 5 枚金币。重玩可追赶最佳局的出杯进度。两分半钟内交杯才计分，第三关金汤力、威士忌酸、莫吉托满分各为 100、200、300 分。营业总分达到关卡目标即可晋级。</p><button class="btn" id="closeGuide">记住了</button></section>`;
+      <p>快单在标注时间内高质量交付（品质达到 92%），多赚 5 枚金币。重玩可追赶最佳局的出杯进度。一分半钟内交杯才计分，第三关金汤力、威士忌酸、莫吉托满分各为 100、200、300 分。营业总分达到关卡目标即可晋级。</p><button class="btn" id="closeGuide">记住了</button></section>`;
     overlayEl.classList.add('on');
     ui.inert=true;
     const close=document.getElementById('closeGuide');
