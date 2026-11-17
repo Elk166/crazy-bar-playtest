@@ -49,7 +49,6 @@ function remindWaitingGuest(){
   const urgency=age>=65?2:age>=35?1:0;
   if(urgency<=guest.reminders)return;
   guest.reminders=urgency;
-  SFX.impatient(urgency===2,guest.npc);
   toast(guest.npc+(urgency===2?' 又催了一声：「我的酒呢？」':' 出声催单：「快好了吗？」'));
 }
 
@@ -246,59 +245,8 @@ SAVE.unlocked=Math.max(1,Math.min(3,Number(SAVE.unlocked)||1));
 
 ;
 const BGM=(()=>{
-  const tracks=[
-  {
-    "title": "一步之遥",
-    "file": "music/tango-quartet.m4a",
-    "source": "https://midifind.com/files/p/p_other/por_una_cabeza_cuarteto/1556-1-0-69355"
-  },
-  {
-    "title": "蓝色多瑙河",
-    "file": "music/saloon-02.m4a",
-    "source": "https://archive.org/details/J.StraussIiOnTheBeautifulBlueDanubekarajan1966"
-  },
-  {
-    "title": "第二圆舞曲 · 钢琴改编",
-    "file": "music/waltz-piano.m4a",
-    "source": "https://midifind.com/files/chsh/drugie_ispolniteli_quot_ch_sh_quot/shostakovich_dmitriy_vals_2/354-1-0-72674"
-  },
-  {
-    "title": "拨弦波尔卡",
-    "file": "music/saloon-04.m4a",
-    "source": "https://archive.org/details/pizzicato-polka-karajan"
-  },
-  {
-    "title": "爱的喜悦",
-    "file": "music/saloon-05.m4a",
-    "source": "https://archive.org/details/nobuko-imai-roland-pontinen-viola-bouquet-includes-schon-rosmarin-liebesleid-salut-damour"
-  },
-  {
-    "title": "美丽的罗斯玛琳",
-    "file": "music/saloon-06.m4a",
-    "source": "https://archive.org/details/nobuko-imai-roland-pontinen-viola-bouquet-includes-schon-rosmarin-liebesleid-salut-damour"
-  },
-  {
-    "title": "爱的致意",
-    "file": "music/saloon-07.m4a",
-    "source": "https://archive.org/details/nobuko-imai-roland-pontinen-viola-bouquet-includes-schon-rosmarin-liebesleid-salut-damour"
-  },
-  {
-    "title": "柴可夫斯基 · 弦乐小夜曲圆舞曲",
-    "file": "music/saloon-08.m4a",
-    "source": "https://archive.org/details/lp_streicherserenade-nussknacker-suite-op-71_pyotr-ilyich-tchaikovsky-herbert-von-karaj"
-  },
-  {
-    "title": "莫扎特 · 小步舞曲与回旋曲",
-    "file": "music/saloon-09.m4a",
-    "source": "https://archive.org/details/lp_the-water-music-suite-eine-kleine-nachtmu_georg-friedrich-hndel-volfgang-amadeus-moz"
-  },
-  {
-    "title": "天堂电影院 · 爱的主题",
-    "file": "music/saloon-10.m4a",
-    "source": "https://archive.org/details/ennio-morricone-cinema-paradiso"
-  }
-];
   const player=new Audio();
+  player.loop=true;
   player.preload='none';
   player.setAttribute('playsinline','');
   let mixContext,musicGain,duckUntil=0;
@@ -313,8 +261,7 @@ const BGM=(()=>{
     duckUntil=Math.max(duckUntil,performance.now()+seconds*1000);mix();
     clearTimeout(restore);restore=setTimeout(mix,Math.ceil(duckUntil-performance.now())+5);
   }
-  let started=false,last=-1;
-  const index=()=>tracks[SAVE.saloonTrack]?Number(SAVE.saloonTrack):0;
+  let started=false;
   function sync(){
     mix();
     if(SAVE.muted||document.hidden||SAVE.musicVolume===0)player.pause();
@@ -331,24 +278,12 @@ const BGM=(()=>{
     }
     mixContext?.resume().catch(()=>{});
     started=true;
-    if(index()!==last){
-      last=index();
-      player.src=new URL(tracks[last].file, location.protocol==='file:'?'https://elk166.github.io/crazy-bar-playtest/':new URL('.',location.href)).href;
-    }
+    if(!player.src)player.src=new URL('music/bar.mp3',location.href.includes('/src/dev.html')?new URL('../',location.href):location.href).href;
     sync();
   }
-  function next(){
-    SAVE.saloonTrack=(index()+1)%tracks.length;
-    saveGame();start();
-    const choice=document.getElementById('musicChoice');
-    if(choice)choice.value=index();
-    const name=document.getElementById('nowPlaying');
-    if(name)name.textContent=tracks[index()].title;
-  }
-  player.addEventListener('ended',next);
   document.addEventListener('visibilitychange',sync);
   window.addEventListener('pagehide',()=>player.pause());
-  return {tracks,index,start,sync,duck,next};
+  return {start,sync,duck};
 })();
 // Recorded instrument samples arranged for the saloon. Credits travel with the HTML.
 const SFX=(()=>{
@@ -380,37 +315,12 @@ const SFX=(()=>{
     s.onended=()=>{voices.delete(s);s.disconnect();g.disconnect();};
     s.start(t,Math.min(offset,s.buffer.duration*.35));s.stop(t+length+.25);
   }
-  let speaking, speechId=0;
-  function stopSpeech(){
-    speechId++;
-    if(speaking){ speaking.stop(); speaking=null; }
-  }
-  async function speak(kind,event){
-    stopSpeech();
-    const id=speechId, name='voice-'+kind+'-'+event;
-    if(!ctx || SAVE.muted || SAVE.effectsVolume===0 || document.hidden)return;
-    try{
-      if(!buffers[name]){
-        const response=await fetch(url(name));
-        if(!response.ok)throw Error(response.status);
-        buffers[name]=await ctx.decodeAudioData(await response.arrayBuffer());
-      }
-      if(id!==speechId || SAVE.muted || document.hidden)return;
-      const source=ctx.createBufferSource(),gain=ctx.createGain();
-      source.buffer=buffers[name]; gain.gain.value=SAVE.effectsVolume??1;
-      source.connect(gain); gain.connect(ctx.destination); speaking=source;
-      source.onended=()=>{if(speaking===source)speaking=null;source.disconnect();gain.disconnect();};
-      BGM.duck(source.buffer.duration+.1); source.start();
-    }catch(err){console.warn('角色语音加载失败',name,err);}
-  }
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopSpeech();});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)for(const s of voices)s.stop();});
   const hit=(n=64)=>play('wood',n,.095,.31);
   const pluck=(n,delay=0)=>play('guitar',n,.24,.24,delay);
-  return {unlock,stopSpeech,credits,tick:()=>hit(55),pick:()=>pluck(57),ding:()=>pluck(69),ice:()=>{hit(79);play('wood',84,.13,.19,.065);},
+  return {unlock,credits,tick:()=>hit(55),pick:()=>pluck(57),ding:()=>pluck(69),ice:()=>{hit(79);play('wood',84,.13,.19,.065);},
     pour:(d=.7)=>play('cello',50,Math.min(d,.43),.13),shake:()=>{hit(56);play('wood',63,.08,.24,.07);},
-    stir:()=>play('wood',75,.18,.22),sip:(kind,good)=>speak(kind,good?'good':'bad'),whoosh:()=>play('cello',43,.19,.13),
-    impatient:(strong,kind)=>speak(kind,strong?'late':'wait'),
+    stir:()=>play('wood',75,.18,.22),whoosh:()=>play('cello',43,.19,.13),
     happy:()=>{pluck(60);pluck(64,.11);pluck(69,.23);},sad:()=>{play('cello',53,.22,.26);play('cello',50,.4,.22,.23);}
   };
 })();
@@ -4471,7 +4381,6 @@ function finishRound(){
     if(D.timeUp || !checkClock()){showFinal();return;}
     advanceCustomer();renderWorld();renderHUD();
   });
-  if(react.good) SFX.happy(); else SFX.sad();
 }
 
 function advanceCustomer(){
@@ -4681,7 +4590,7 @@ function showServeReaction(res,order,onDone){
   const npc=(order&&order.npc)||'fox';
   /* v11.15：先让客人真的举杯喝一口，再当场变脸；反馈播完才换下一位，
      避免「评价还没看清，订单已经换成别人」导致玩家以为没有反馈。 */
-  SaloonGuest.taste(order);SFX.sip(npc,good);
+  SaloonGuest.taste(order);
   const old=fxEl.querySelector('.npc-react'); if(old) old.remove();
   clearTimeout(reactTimer); clearTimeout(reactWorldTimer);
   const el=document.createElement('div');
@@ -4751,17 +4660,15 @@ function renderHUD(){
   updateTimerUI();                 /* HUD 重绘后立刻把计时补回，不会闪成 01:30 */
 }
 function openSoundSettings(sound){
-    overlayEl.innerHTML=`<section class="shift-manual audio-settings" role="dialog" aria-label="声音设置"><h2 id="nowPlaying">${BGM.tracks[BGM.index()].title}</h2><button id="nextMusic">下一首 ›</button><label><input type="checkbox" id="muteAll"> 全部静音</label><details><summary>选曲与音量</summary><label>背景音乐<select id="musicChoice">${BGM.tracks.map((t,i)=>`<option value="${i}">${t.title}</option>`).join('')}</select></label>
+    overlayEl.innerHTML=`<section class="shift-manual audio-settings" role="dialog" aria-label="声音设置"><h2>声音设置</h2><label><input type="checkbox" id="muteAll"> 全部静音</label>
       <label>音乐音量<input type="range" id="musicLevel" min="0" max="1" step=".01"></label><label>操作音量<input type="range" id="effectsLevel" min="0" max="1" step=".01"></label>
-      </details><button class="btn" id="closeSound">完成</button></section>`;
+      <button class="btn" id="closeSound">完成</button></section>`;
     overlayEl.classList.add('on');ui.inert=true;
-    const choice=$('#musicChoice'),music=$('#musicLevel'),effects=$('#effectsLevel'),mute=$('#muteAll');
-    choice.value=BGM.index();music.value=SAVE.musicVolume??.35;effects.value=SAVE.effectsVolume??1;mute.checked=!!SAVE.muted;
-    choice.onchange=()=>{SAVE.saloonTrack=Number(choice.value);saveGame();BGM.start();$('#nowPlaying').textContent=BGM.tracks[BGM.index()].title;};
+    const music=$('#musicLevel'),effects=$('#effectsLevel'),mute=$('#muteAll');
+    music.value=SAVE.musicVolume??.35;effects.value=SAVE.effectsVolume??1;mute.checked=!!SAVE.muted;
     music.oninput=()=>{SAVE.musicVolume=Number(music.value);saveGame();BGM.sync();};
     effects.oninput=()=>{SAVE.effectsVolume=Number(effects.value);saveGame();};
-    mute.onchange=()=>{SAVE.muted=mute.checked;if(SAVE.muted)SFX.stopSpeech();saveGame();BGM.start();};
-    $('#nextMusic').onclick=BGM.next;
+    mute.onchange=()=>{SAVE.muted=mute.checked;saveGame();BGM.start();};
     $('#closeSound').onclick=()=>{overlayEl.classList.remove('on');overlayEl.innerHTML='';ui.inert=false;sound.focus();};
 }
 document.addEventListener('click',e=>{const button=e.target.closest('[data-music],#soundSwitch');if(button)openSoundSettings(button);});
