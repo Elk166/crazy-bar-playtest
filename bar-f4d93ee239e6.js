@@ -247,7 +247,7 @@ SAVE.unlocked=Math.max(1,Math.min(3,Number(SAVE.unlocked)||1));
 const BGM=(()=>{
   const player=new Audio();
   player.loop=true;
-  player.preload='none';
+  player.preload='auto';
   player.setAttribute('playsinline','');
   let mixContext,musicGain,duckUntil=0;
   function mix(){
@@ -268,15 +268,6 @@ const BGM=(()=>{
     else if(started && player.paused)player.play().catch(()=>{});
   }
   function start(){
-    if(!mixContext && navigator.userActivation?.isActive && (window.AudioContext||window.webkitAudioContext)){
-      mixContext=new (window.AudioContext||window.webkitAudioContext)();
-      player.volume=1;
-      musicGain=mixContext.createGain();
-      musicGain.gain.value=0;
-      mixContext.createMediaElementSource(player).connect(musicGain);
-      musicGain.connect(mixContext.destination);
-    }
-    mixContext?.resume().catch(()=>{});
     started=true;
     if(!player.src)player.src=new URL('music/bar.mp3',location.href.includes('/src/dev.html')?new URL('../',location.href):location.href).href;
     sync();
@@ -292,21 +283,37 @@ const SFX=(()=>{
 
   const buffers={}, voices=new Set();
   let ctx,loading;
+  let pending=null;
   const url=name=>'assets/audio/'+name+'.mp3';
+  function preload(){
+    const C=window.AudioContext||window.webkitAudioContext;
+    if(!C)return Promise.resolve();
+    ctx??=new C();
+    loading??=Promise.all(Object.values(instruments).map(async ([name])=>{
+      if(buffers[name])return;
+      const response=await fetch(url(name));
+      if(!response.ok)throw Error('音效加载失败 '+response.status);
+      buffers[name]=await ctx.decodeAudioData(await response.arrayBuffer());
+    })).catch(error=>{loading=null;console.warn(error);});
+    return loading;
+  }
   function unlock(){
     BGM.start();
-    const C=window.AudioContext||window.webkitAudioContext;
-    if(!C)return;
-    ctx??=new C();
-    if(ctx.state==='suspended')ctx.resume().catch(()=>{});
-    loading??=Promise.all(Object.values(instruments).map(async ([name])=>{
-      const bytes=await (await fetch(url(name))).arrayBuffer();
-      buffers[name]=await ctx.decodeAudioData(bytes);
-    })).catch(()=>{loading=null;});
+    const ready=preload();
+    if(ctx && ctx.state!=='running')ctx.resume().catch(()=>{});
+    return ready;
   }
   function play(instrument,note,length,volume,delay=0,offset=0){
     const [name,root]=instruments[instrument];
-    if(!ctx||!buffers[name]||SAVE.muted||document.hidden)return;
+    if(SAVE.muted||document.hidden)return;
+    if(!ctx||!buffers[name]){
+      pending={args:[instrument,note,length,volume,delay,offset],at:performance.now()};
+      unlock().then(()=>{
+        const request=pending;pending=null;
+        if(request && buffers[name] && performance.now()-request.at<1200)play(...request.args);
+      });
+      return;
+    }
     if((SAVE.effectsVolume??1)>0)BGM.duck(length+delay+.28);
     const s=ctx.createBufferSource(),g=ctx.createGain(),t=ctx.currentTime+delay;
     s.buffer=buffers[name];s.playbackRate.value=2**((note-root)/12);
@@ -318,7 +325,7 @@ const SFX=(()=>{
   document.addEventListener('visibilitychange',()=>{if(document.hidden)for(const s of voices)s.stop();});
   const hit=(n=64)=>play('wood',n,.095,.31);
   const pluck=(n,delay=0)=>play('guitar',n,.24,.24,delay);
-  return {unlock,credits,tick:()=>hit(55),pick:()=>pluck(57),ding:()=>pluck(69),ice:()=>{hit(79);play('wood',84,.13,.19,.065);},
+  return {unlock,preload,credits,tick:()=>hit(55),pick:()=>pluck(57),ding:()=>pluck(69),ice:()=>{hit(79);play('wood',84,.13,.19,.065);},
     pour:(d=.7)=>play('cello',50,Math.min(d,.43),.13),shake:()=>{hit(56);play('wood',63,.08,.24,.07);},
     stir:()=>play('wood',75,.18,.22),whoosh:()=>play('cello',43,.19,.13),
     happy:()=>{pluck(60);pluck(64,.11);pluck(69,.23);},sad:()=>{play('cello',53,.22,.26);play('cello',50,.4,.22,.23);}
@@ -4967,7 +4974,8 @@ document.addEventListener('visibilitychange',()=>{
 });
 boot();
 
+SFX.preload();
 BGM.start();
-for(const event of ['touchend','click','keydown','WeixinJSBridgeReady']){
-  document.addEventListener(event,()=>BGM.start(),{capture:true,passive:true});
+for(const event of ['pointerdown','touchend','click','keydown','WeixinJSBridgeReady']){
+  document.addEventListener(event,()=>SFX.unlock(),{capture:true,passive:true});
 }
