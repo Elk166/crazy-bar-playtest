@@ -288,7 +288,7 @@ const BGM=(()=>{
 // Recorded instrument samples arranged for the saloon. Credits travel with the HTML.
 const SFX=(()=>{
   const credits='Instrument recordings edited by nbrosowsky, https://github.com/nbrosowsky/tonejs-instruments (CC BY 3.0, https://creativecommons.org/licenses/by/3.0/). Violin, bassoon and xylophone: VSO2. Cello: flcellogrl. Acoustic guitar: Iowa. Repitched and arranged for Crazy Bar.';
-  const instruments={violin:['violin-A4',69],upper:['violin-E5',76],cello:['cello-A2',45],guitar:['guitar-acoustic-A3',57],wood:['xylophone-G4',67],reed:['bassoon-A2',45]};
+  const instruments={cello:['cello-A2',45],guitar:['guitar-acoustic-A3',57],wood:['xylophone-G4',67]};
 
   const buffers={}, voices=new Set();
   let ctx,loading;
