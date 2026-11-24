@@ -1242,3 +1242,13 @@ body,#stage,#scene3d{background:#251912}
 .audio-settings label{display:block;margin:14px 0}.audio-settings select,.audio-settings input[type=range]{display:block;width:100%;margin-top:6px}.audio-settings select,.audio-settings button{min-height:44px}
 .nav-music{width:40px;min-height:40px;border:0;border-left:1px solid #947447;background:transparent;color:#ffde9e;font-size:22px;touch-action:manipulation}
 .audio-settings summary{padding:12px 0;cursor:pointer}.audio-settings{max-height:85%;overflow:auto}
+
+@media (orientation:portrait){
+  #stage{top:0;left:0;transform-origin:0 0;transform:scale(var(--s,1))}
+}
+@supports (height:100dvh){
+  #playArea{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));bottom:auto}
+}
+#makeLayer,#glassWrap,#vesselWrap{touch-action:none}
+#nightStart{width:100%;text-align:left;font:inherit;color:inherit}
+#nightStart small{display:block;font-size:13px}
